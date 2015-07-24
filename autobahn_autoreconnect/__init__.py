@@ -10,10 +10,6 @@ import txaio
 
 txaio.use_asyncio()
 
-__all__ = (
-    'ApplicationRunner'
-)
-
 class ExceededRetryCount(Exception):
     pass
 
@@ -29,6 +25,14 @@ class IReconnectStrategy(object):
 
     def retry(self):
         raise NotImplementedError('retry')
+
+
+class NoRetryStrategy(IReconnectStrategy):
+    def reset_retry_interval(self):
+        pass
+
+    def retry(self):
+        return False
 
 
 class BackoffStrategy(IReconnectStrategy):
@@ -166,6 +170,7 @@ class ApplicationRunner(object):
                     yield from asyncio.sleep(retry_interval)
                 else:
                     print('Exceeded retry count')
+                    self._loop.stop()
                     raise ExceededRetryCount()
 
                 self._retry_strategy.increase_retry_interval()
