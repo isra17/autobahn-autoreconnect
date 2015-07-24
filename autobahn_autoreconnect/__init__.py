@@ -88,10 +88,10 @@ class ApplicationRunner(object):
         self._debug = debug
         self._debug_wamp = debug_wamp
         self._debug_app = debug_app
-        self._make = None
         self._serializers = serializers
         self._loop = loop or asyncio.get_event_loop()
         self._retry_strategy = retry_strategy
+        self._closing = False
 
         self._isSecure, self._host, self._port, _, _, _ = parseWsUrl(url)
 
@@ -126,13 +126,13 @@ class ApplicationRunner(object):
                 session.debug_app = self._debug_app
                 return session
 
-        transport_factory = WampWebSocketClientFactory(_create_app_session, url=self._url, serializers=self._serializers,
+        self._transport_factory = WampWebSocketClientFactory(_create_app_session, url=self._url, serializers=self._serializers,
                                                        debug=self._debug, debug_wamp=self._debug_wamp)
 
         txaio.use_asyncio()
         txaio.config.loop = self._loop
 
-        protocol = self._loop.run_until_complete(self._connect(transport_factory))
+        asyncio.async(self._connect(), loop=self._loop)
         self._loop.add_signal_handler(signal.SIGTERM, self.stop)
 
         try:
@@ -142,31 +142,41 @@ class ApplicationRunner(object):
             # (done outside this except so SIGTERM gets the same handling)
             pass
 
-        if protocol._session:
-            self._loop.run_until_complete(protocol._session.leave())
+        self._closing = True
+
+        if self._active_protocol and self._active_protocol._session:
+            self._loop.run_until_complete(self._active_protocol._session.leave())
         self._loop.close()
 
     @asyncio.coroutine
-    def _connect(self, transport_factory):
+    def _connect(self):
+        self._active_protocol = None
         self._retry_strategy.reset_retry_interval()
         while True:
             try:
-                _, protocol = yield from self._loop.create_connection(transport_factory, self._host, self._port, ssl=self._ssl)
-                protocol.is_closed.add_done_callback(self._closed)
-                return protocol
+                _, protocol = yield from self._loop.create_connection(self._transport_factory, self._host, self._port, ssl=self._ssl)
+                protocol.is_closed.add_done_callback(self._reconnect)
+                self._active_protocol = protocol
+                return
             except OSError:
+                print('Connection failed')
                 if self._retry_strategy.retry():
                     retry_interval = self._retry_strategy.get_retry_interval()
-                    print('Connection failed, retry in {} seconds'.format(retry_interval))
+                    print('Retry in {} seconds'.format(retry_interval))
                     yield from asyncio.sleep(retry_interval)
-                    self._retry_strategy.increase_retry_interval()
                 else:
-                    print('Connection failed, exceeded retry count')
+                    print('Exceeded retry count')
                     raise ExceededRetryCount()
 
-    def _closed(self, f):
-        # Reconnect
-        print('_closed')
+                self._retry_strategy.increase_retry_interval()
 
-    def stop(self):
+    def _reconnect(self, f):
+        # Reconnect
+        print('Connection lost')
+        if not self._closing:
+            print('Reconnecting')
+            asyncio.async(self._connect(), loop=self._loop)
+
+    def stop(self, *args):
         self._loop.stop()
+

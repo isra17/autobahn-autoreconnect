@@ -20,7 +20,7 @@ if __name__ == '__main__':
     runner = ApplicationRunner(
             os.environ.get("AUTOBAHN_DEMO_ROUTER", "ws://localhost:8080/ws"),
         u"realm1",
-        debug_wamp=True,  # optional; log many WAMP details
+        debug_wamp=False,  # optional; log many WAMP details
         debug=False,  # optional; log even more details
     )
     runner.run(MyComponent)
