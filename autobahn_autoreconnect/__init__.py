@@ -14,6 +14,43 @@ __all__ = (
     'ApplicationRunner'
 )
 
+class ExceededRetryCount(Exception):
+    pass
+
+class IReconnectStrategy(object):
+    def get_retry_interval(self):
+        raise NotImplementedError('get_retry_interval')
+
+    def reset_retry_interval(self):
+        raise NotImplementedError('reset_retry_interval')
+
+    def increase_retry_interval(self):
+        raise NotImplementedError('increase_retry_interval')
+
+    def retry(self):
+        raise NotImplementedError('retry')
+
+
+class BackoffStrategy(IReconnectStrategy):
+    def __init__(self, initial_interval=0.5, max_interval=512, factor=2):
+        self._initial_interval = initial_interval
+        self._retry_interval = initial_interval
+        self._max_interval = max_interval
+        self._factor = factor
+
+    def get_retry_interval(self):
+        return self._retry_interval
+
+    def reset_retry_interval(self):
+        self._retry_interval = self._initial_interval
+
+    def increase_retry_interval(self):
+        self._retry_interval *= self._factor
+
+    def retry(self):
+        return self._retry_interval <= self._max_interval
+
+
 class ApplicationRunner(object):
     """
     This class is a slightly modified version of autobahn.asyncio.wamp.ApplicationRunner
@@ -22,7 +59,7 @@ class ApplicationRunner(object):
 
     def __init__(self, url, realm, extra=None, serializers=None,
                  debug=False, debug_wamp=False, debug_app=False,
-                 ssl=None, loop=None):
+                 ssl=None, loop=None, retry_strategy=BackoffStrategy()):
         """
         :param url: The WebSocket URL of the WAMP router to connect to (e.g. `ws://somehost.com:8090/somepath`)
         :type url: unicode
@@ -54,6 +91,7 @@ class ApplicationRunner(object):
         self._make = None
         self._serializers = serializers
         self._loop = loop or asyncio.get_event_loop()
+        self._retry_strategy = retry_strategy
 
         self._isSecure, self._host, self._port, _, _, _ = parseWsUrl(url)
 
@@ -76,7 +114,6 @@ class ApplicationRunner(object):
         :type make: callable
         """
 
-        # 1) create a WAMP-over-WebSocket transport client factory
         def _create_app_session():
             cfg = ComponentConfig(self._realm, self._extra)
             try:
@@ -98,7 +135,6 @@ class ApplicationRunner(object):
         protocol = self._loop.run_until_complete(self._connect(transport_factory))
         self._loop.add_signal_handler(signal.SIGTERM, self.stop)
 
-        # 4) now enter the asyncio event loop
         try:
             self._loop.run_forever()
         except KeyboardInterrupt:
@@ -112,15 +148,21 @@ class ApplicationRunner(object):
 
     @asyncio.coroutine
     def _connect(self, transport_factory):
+        self._retry_strategy.reset_retry_interval()
         while True:
             try:
                 _, protocol = yield from self._loop.create_connection(transport_factory, self._host, self._port, ssl=self._ssl)
                 protocol.is_closed.add_done_callback(self._closed)
                 return protocol
             except OSError:
-                # Reconnect
-                print('OSError')
-                pass
+                if self._retry_strategy.retry():
+                    retry_interval = self._retry_strategy.get_retry_interval()
+                    print('Connection failed, retry in {} seconds'.format(retry_interval))
+                    yield from asyncio.sleep(retry_interval)
+                    self._retry_strategy.increase_retry_interval()
+                else:
+                    print('Connection failed, exceeded retry count')
+                    raise ExceededRetryCount()
 
     def _closed(self, f):
         # Reconnect
