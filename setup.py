@@ -11,5 +11,6 @@ setup(
     license='LGPL2',
 
     packages=find_packages(exclude=['contrib', 'docs', 'tests*']),
-    install_requires=['autobahn']
+    install_requires=['autobahn'],
+    dependency_links=['git+git@github.com:tavendo/AutobahnPython.git@3bcbc00382a9d601fe4565216d4e7dc737d5f65e#egg=autobahn']
 )
