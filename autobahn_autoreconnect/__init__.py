@@ -29,7 +29,10 @@ import signal
 
 from autobahn.wamp import protocol
 from autobahn.wamp.types import ComponentConfig
-from autobahn.websocket.protocol import parseWsUrl
+try:
+    from autobahn.websocket.protocol import parseWsUrl
+except:
+    from autobahn.websocket.util import parse_url as parseWsUrl
 from autobahn.asyncio.websocket import WampWebSocketClientFactory
 
 import asyncio
