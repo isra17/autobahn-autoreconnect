@@ -154,6 +154,7 @@ class ApplicationRunner(object):
                 return session
 
         self._transport_factory = WampWebSocketClientFactory(_create_app_session, url=self._url, serializers=self._serializers)
+        self._transport_factory.setProtocolOptions(autoPingInterval=5, autoPingTimeout=2)
 
         txaio.use_asyncio()
         txaio.config.loop = self._loop
