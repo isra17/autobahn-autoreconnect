@@ -88,8 +88,7 @@ class ApplicationRunner(object):
     with auto reconnection feature to with customizable strategies.
     """
 
-    def __init__(self, url, realm, extra=None, serializers=None,
-                 debug=False, debug_wamp=False, debug_app=False,
+    def __init__(self, url, realm, extra=None, serializers=None, debug_app=False,
                  ssl=None, loop=None, retry_strategy=BackoffStrategy()):
         """
         :param url: The WebSocket URL of the WAMP router to connect to (e.g. `ws://somehost.com:8090/somepath`)
@@ -101,10 +100,6 @@ class ApplicationRunner(object):
         :param serializers: A list of WAMP serializers to use (or None for default serializers).
            Serializers must implement :class:`autobahn.wamp.interfaces.ISerializer`.
         :type serializers: list
-        :param debug: Turn on low-level debugging.
-        :type debug: bool
-        :param debug_wamp: Turn on WAMP-level debugging.
-        :type debug_wamp: bool
         :param debug_app: Turn on app-level debugging.
         :type debug_app: bool
         :param ssl: An (optional) SSL context instance or a bool. See
@@ -116,8 +111,6 @@ class ApplicationRunner(object):
         self._url = url
         self._realm = realm
         self._extra = extra or dict()
-        self._debug = debug
-        self._debug_wamp = debug_wamp
         self._debug_app = debug_app
         self._serializers = serializers
         self._loop = loop or asyncio.get_event_loop()
@@ -157,8 +150,7 @@ class ApplicationRunner(object):
                 session.debug_app = self._debug_app
                 return session
 
-        self._transport_factory = WampWebSocketClientFactory(_create_app_session, url=self._url, serializers=self._serializers,
-                                                       debug=self._debug, debug_wamp=self._debug_wamp)
+        self._transport_factory = WampWebSocketClientFactory(_create_app_session, url=self._url, serializers=self._serializers)
 
         txaio.use_asyncio()
         txaio.config.loop = self._loop
