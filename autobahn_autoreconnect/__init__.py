@@ -92,7 +92,7 @@ class ApplicationRunner(object):
     """
 
     def __init__(self, url, realm, extra=None, serializers=None, debug_app=False,
-                 ssl=None, loop=None, retry_strategy=BackoffStrategy()):
+                 ssl=None, loop=None, retry_strategy=BackoffStrategy(), autoPingInterval=10, autoPingTimeout=27):
         """
         :param url: The WebSocket URL of the WAMP router to connect to (e.g. `ws://somehost.com:8090/somepath`)
         :type url: unicode
@@ -110,6 +110,12 @@ class ApplicationRunner(object):
            method, to which this value is passed as the ``ssl=``
            kwarg.
         :type ssl: :class:`ssl.SSLContext` or bool
+        :param autoPingInterval: How often to send a keep-alive ping to the router (in seconds).
+           A value of None turns off pings.
+        :type autoPingInterval: int
+        :param autoPingTimeout: Consider the connection dropped if the router does not respond to our
+           ping for more than X seconds.
+        :type autoPingTimeout: int
         """
         self._url = url
         self._realm = realm
@@ -119,6 +125,8 @@ class ApplicationRunner(object):
         self._loop = loop or asyncio.get_event_loop()
         self._retry_strategy = retry_strategy
         self._closing = False
+        self._autoPingInterval = autoPingInterval
+        self._autoPingTimeout = autoPingTimeout
 
         self._isSecure, self._host, self._port, _, _, _ = parseWsUrl(url)
 
@@ -155,14 +163,8 @@ class ApplicationRunner(object):
 
         self._transport_factory = WampWebSocketClientFactory(_create_app_session, url=self._url, serializers=self._serializers)
 
-        autoPingInterval = 10
-        autoPingTimeout = 27
-        if 'autoPingInterval' in self._extra:
-            autoPingInterval = self._extra['autoPingInterval']
-        if 'autoPingTimeout' in self._extra:
-            autoPingTimeout = self._extra['autoPingTimeout']
-        if autoPingInterval is not None and autoPingTimeout is not None:
-            self._transport_factory.setProtocolOptions(autoPingInterval=autoPingInterval, autoPingTimeout=autoPingTimeout)
+        if self._autoPingInterval is not None and self._autoPingTimeout is not None:
+            self._transport_factory.setProtocolOptions(autoPingInterval=self._autoPingInterval, autoPingTimeout=self._autoPingTimeout)
 
         txaio.use_asyncio()
         txaio.config.loop = self._loop
