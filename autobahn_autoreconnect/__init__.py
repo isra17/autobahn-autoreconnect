@@ -171,7 +171,11 @@ class ApplicationRunner(object):
         txaio.config.loop = self._loop
 
         asyncio.async(self._connect(), loop=self._loop)
-        self._loop.add_signal_handler(signal.SIGTERM, self.stop)
+        
+        try:
+            loop.add_signal_handler(signal.SIGTERM, loop.stop)
+        except NotImplementedError:
+            pass  # Ignore if not implemented. Means this program is running in windows.
 
         try:
             self._loop.run_forever()
