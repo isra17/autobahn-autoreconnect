@@ -172,7 +172,11 @@ class ApplicationRunner(object):
 
         asyncio.async(self._connect(), loop=self._loop)
         self._loop.add_signal_handler(signal.SIGTERM, self.stop)
-
+        try:
+            self._loop.add_signal_handler(signal.SIGTERM, self.stop)
+        except NotImplementedError:
+             # Ignore if not implemented. Means this program is running in windows.
+            pass 
         try:
             self._loop.run_forever()
         except KeyboardInterrupt:
