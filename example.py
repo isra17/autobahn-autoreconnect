@@ -1,4 +1,7 @@
 import os
+import txaio
+txaio.use_asyncio()
+
 from autobahn.asyncio.wamp import ApplicationSession
 from autobahn_autoreconnect import ApplicationRunner
 
