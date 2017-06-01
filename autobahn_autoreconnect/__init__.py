@@ -93,7 +93,7 @@ class ApplicationRunner(object):
     """
 
     def __init__(self, url, realm, extra=None, serializers=None, debug_app=False,
-                 ssl=None, loop=None, retry_strategy=BackoffStrategy(), auto_ping_interval=10, auto_ping_timeout=27):
+                 ssl=None, loop=None, retry_strategy=BackoffStrategy(), open_handshake_timeout=30, auto_ping_interval=10, auto_ping_timeout=27):
         """
         :param url: The WebSocket URL of the WAMP router to connect to (e.g. `ws://somehost.com:8090/somepath`)
         :type url: unicode
@@ -111,6 +111,7 @@ class ApplicationRunner(object):
            method, to which this value is passed as the ``ssl=``
            kwarg.
         :type ssl: :class:`ssl.SSLContext` or bool
+        :param open_handshake_timeout: How long to wait for the opening handshake to complete (in seconds).
         :param auto_ping_interval: How often to send a keep-alive ping to the router (in seconds).
            A value of None turns off pings.
         :type auto_ping_interval: int
@@ -126,6 +127,7 @@ class ApplicationRunner(object):
         self._loop = loop or asyncio.get_event_loop()
         self._retry_strategy = retry_strategy
         self._closing = False
+        self._open_handshake_timeout = open_handshake_timeout
         self._auto_ping_interval = auto_ping_interval
         self._auto_ping_timeout = auto_ping_timeout
 
@@ -165,19 +167,19 @@ class ApplicationRunner(object):
         self._transport_factory = WampWebSocketClientFactory(_create_app_session, url=self._url, serializers=self._serializers)
 
         if self._auto_ping_interval is not None and self._auto_ping_timeout is not None:
-            self._transport_factory.setProtocolOptions(autoPingInterval=self._auto_ping_interval, autoPingTimeout=self._auto_ping_timeout)
+            self._transport_factory.setProtocolOptions(openHandshakeTimeout=self._open_handshake_timeout, autoPingInterval=self._auto_ping_interval, autoPingTimeout=self._auto_ping_timeout)
 
         txaio.use_asyncio()
         txaio.config.loop = self._loop
 
         asyncio.async(self._connect(), loop=self._loop)
-        
+
         try:
             self._loop.add_signal_handler(signal.SIGTERM, self.stop)
         except NotImplementedError:
              # Ignore if not implemented. Means this program is running in windows.
-            pass 
-        
+            pass
+
         try:
             self._loop.run_forever()
         except KeyboardInterrupt:
